@@ -95,7 +95,7 @@ class RefundOperation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
-    proposal_id: Mapped[int | None] = mapped_column(Integer)  # FK added in a later migration
+    proposal_id: Mapped[int | None] = mapped_column(ForeignKey("action_proposals.id"))
     amount_minor: Mapped[int] = mapped_column(BigInteger)
     idempotency_key: Mapped[str] = mapped_column(String(100))
     provider_reference: Mapped[str | None] = mapped_column(String(100))
@@ -154,3 +154,40 @@ class PolicyChunk(Base):
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
 
     document: Mapped[PolicyDocument] = relationship(back_populates="chunks")
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    thread_id: Mapped[str] = mapped_column(String(100), unique=True)  # LangGraph thread
+    # running | awaiting_approval | answered | escalated | needs_info | rejected | expired
+    # | approval_invalid | refund_succeeded | refund_unconfirmed | refund_failed | failed
+    status: Mapped[str] = mapped_column(String(40))
+    final_response: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ActionProposal(Base):
+    __tablename__ = "action_proposals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(50))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    payload_hash: Mapped[str] = mapped_column(String(64))
+    # pending | approved | rejected | expired | invalidated | executed
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Approval(Base):
+    __tablename__ = "approvals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    proposal_id: Mapped[int] = mapped_column(ForeignKey("action_proposals.id"), unique=True)
+    reviewer_id: Mapped[str | None] = mapped_column(String(100))
+    decision: Mapped[str | None] = mapped_column(String(20))  # NULL = pending | approved | rejected | expired
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

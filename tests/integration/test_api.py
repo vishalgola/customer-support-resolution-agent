@@ -45,10 +45,3 @@ def test_customer_can_create_ticket_for_own_order():
     assert r.status_code == 201
     assert r.json()["status"] == "open"
 
-
-def test_customer_cannot_trigger_refund():
-    assert client.post("/tickets/1/refund", headers=auth("auth|asha")).status_code == 403
-
-
-def test_reviewer_refund_on_missing_ticket_is_404():
-    assert client.post("/tickets/99999/refund", headers=auth("auth|reviewer1")).status_code == 404

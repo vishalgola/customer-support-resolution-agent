@@ -26,7 +26,7 @@ def search_policy(
     *,
     as_of: date | None = None,
     top_k: int = 4,
-    min_score: float = 0.0,
+    min_score: float = DEFAULT_MIN_SCORE,     # calibrated on sample queries; re-check with the eval set
     doc_key: str | None = None,
 ) -> list[PolicyHit]:
     as_of = as_of or date.today()

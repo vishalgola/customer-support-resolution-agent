@@ -5,7 +5,6 @@ from app.auth.deps import Principal, get_principal, require_customer, require_re
 from app.db.models import AuditEvent, Order, Ticket
 from app.db.session import get_db
 from app.schemas.tickets import TicketCreate, TicketOut
-from app.services.refunds import RefundBlocked, TicketNotFound, execute_refund
 
 router = APIRouter(tags=["tickets"])
 
@@ -38,14 +37,3 @@ def get_ticket(ticket_id: int, p: Principal = Depends(get_principal),
     return ticket
 
 
-@router.post("/tickets/{ticket_id}/refund")
-def refund_ticket(ticket_id: int, p: Principal = Depends(require_reviewer)):
-    """Week 1 stand-in for approval: only a reviewer can trigger it.
-    Week 3 replaces this with proposals + approvals bound to the exact payload."""
-    try:
-        return execute_refund(ticket_id, p.subject)
-    except TicketNotFound:
-        raise HTTPException(404, "Ticket not found")
-    except RefundBlocked as e:
-        raise HTTPException(409, {"reason_code": e.result.reason_code,
-                                  "message": e.result.message})
