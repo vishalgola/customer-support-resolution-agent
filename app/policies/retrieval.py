@@ -8,6 +8,8 @@ from app.db.models import PolicyChunk, PolicyDocument
 from app.policies.embeddings import embed_query
 
 
+DEFAULT_MIN_SCORE = 0.45  # calibrated on sample queries; re-check with the eval set
+
 @dataclass(frozen=True)
 class PolicyHit:
     ref: str

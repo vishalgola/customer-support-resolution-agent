@@ -51,3 +51,6 @@ def test_date_before_any_policy_returns_nothing(db):
 def test_doc_key_filter(db):
     hits = search_policy(db, "what happens next", doc_key="exceptions", top_k=5)
     assert hits and all(h.ref.startswith("exceptions_v1") for h in hits)
+
+def test_irrelevant_query_returns_nothing(db):
+    assert search_policy(db, "what is the capital of France") == []
