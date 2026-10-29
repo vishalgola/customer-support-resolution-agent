@@ -1,4 +1,7 @@
 from datetime import datetime
+from datetime import date
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Date
 
 from sqlalchemy import (
     BigInteger, CheckConstraint, DateTime, ForeignKey, Integer,
@@ -114,3 +117,40 @@ class AuditEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+EMBEDDING_DIM = 384
+
+
+class PolicyDocument(Base):
+    __tablename__ = "policy_documents"
+    __table_args__ = (
+        UniqueConstraint("doc_key", "version", name="uq_policy_doc_version"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    doc_key: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(200))
+    version: Mapped[int] = mapped_column(Integer)
+    effective_from: Mapped[date] = mapped_column(Date)
+    effective_to: Mapped[date | None] = mapped_column(Date)
+    source_uri: Mapped[str] = mapped_column(String(300))
+
+    chunks: Mapped[list["PolicyChunk"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class PolicyChunk(Base):
+    __tablename__ = "policy_chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("policy_documents.id", ondelete="CASCADE"), index=True
+    )
+    ref: Mapped[str] = mapped_column(String(200), unique=True)  # e.g. refund_policy_v1:section_3
+    section: Mapped[int] = mapped_column(Integer)
+    heading: Mapped[str] = mapped_column(String(200))
+    content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
+
+    document: Mapped[PolicyDocument] = relationship(back_populates="chunks")
