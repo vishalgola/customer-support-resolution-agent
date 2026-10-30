@@ -8,6 +8,7 @@ from app.db.models import Order
 from app.db.session import get_db
 from app.schemas.orders import OrderOut
 from app.services.eligibility import get_refund_eligibility
+from sqlalchemy import select
 
 router = APIRouter(tags=["orders"])
 
@@ -30,3 +31,8 @@ def refund_eligibility(order_id: int, p: Principal = Depends(require_customer),
                        db: Session = Depends(get_db)):
     _own_order(db, order_id, p)
     return asdict(get_refund_eligibility(db, p.customer_id, order_id))
+
+@router.get("/orders", response_model=list[OrderOut])
+def list_orders(p: Principal = Depends(require_customer), db: Session = Depends(get_db)):
+    rows = db.scalars(select(Order).where(Order.customer_id == p.customer_id).order_by(Order.id))
+    return [OrderOut.model_validate(o) for o in rows]

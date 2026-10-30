@@ -49,7 +49,9 @@ def validate_proposal(
     if proposal.action != "escalate":
         if not proposal.evidence_refs:
             errors.append("MISSING_EVIDENCE")
-        if not proposal.policy_refs:
+        # Citation sirf refund decisions ke liye zaroori hai.
+        # Order-status ka jawab records se aata hai, policy se nahi.
+        if category == "refund_request" and not proposal.policy_refs:
             errors.append("MISSING_POLICY_CITATION")
 
     return errors

@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support Resolution Agent</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --muted:#6b7686; --line:#e2e6ec;
+          --accent:#2f5bea; --ok:#1a7f4b; --warn:#b26a00; --bad:#c0392b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:12px 20px;
+           background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; flex:1; min-width:220px; }
+  main { max-width:1100px; margin:20px auto; padding:0 16px; display:grid; gap:16px;
+         grid-template-columns: 1fr 1fr; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  .contents { display: contents; }
+  .hidden { display: none !important; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; min-width:0; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 10px; }
+  .card h3 { font-size:13px; margin:16px 0 6px; }
+  .full { grid-column: 1 / -1; }
+  .muted { color:var(--muted); }
+  select, textarea, button { font:inherit; }
+  select, textarea { width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  header select { width:auto; }
+  textarea { min-height:96px; resize:vertical; margin:8px 0; }
+  button { padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:#fff; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.good { background:var(--ok); color:#fff; border-color:var(--ok); }
+  button.danger { background:#fff; color:var(--bad); border-color:var(--bad); }
+  button:disabled { opacity:.5; cursor:default; }
+  .queue-item { display:block; width:100%; text-align:left; margin-bottom:8px; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-weight:600; font-size:12px;
+           background:#eef0f4; color:var(--muted); }
+  .badge.ok { background:#e3f4ea; color:var(--ok); }
+  .badge.warn { background:#fdf1dc; color:var(--warn); }
+  .badge.bad { background:#fbe5e2; color:var(--bad); }
+  .kv { display:flex; gap:8px; padding:2px 0; }
+  .kv .k { width:120px; flex:none; color:var(--muted); }
+  blockquote { margin:8px 0; padding:8px 12px; border-left:3px solid var(--line); background:#fafbfc; }
+  pre { white-space:pre-wrap; margin:4px 0 0; font:12px/1.5 ui-monospace, Consolas, monospace; }
+  .policy { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; }
+  .timeline { list-style:none; margin:0; padding:0; }
+  .timeline li { padding:6px 0; border-bottom:1px solid var(--line); }
+  .timeline .t { color:var(--muted); font-size:12px; }
+  .payload { color:var(--muted); font:12px ui-monospace, Consolas, monospace; word-break:break-all; }
+  .err { color:var(--bad); }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Support Resolution Agent <span class="muted">· demo with synthetic data</span></h1>
+  <select id="who">
+    <option value="auth|asha">asha (customer)</option>
+    <option value="auth|ravi">ravi (customer)</option>
+    <option value="auth|reviewer1">reviewer1 (reviewer)</option>
+  </select>
+  <button id="loginBtn" class="primary">Log in</button>
+  <span id="whoami" class="muted">not logged in</span>
+</header>
+
+<main>
+  <section id="intro" class="card full">
+    Log in as a customer to file a complaint, or as the reviewer to handle the approval queue.
+    Open this page in two tabs to see both sides at once.
+  </section>
+
+  <div id="customer" class="contents hidden">
+    <section class="card">
+      <h2>1. Customer complaint</h2>
+      <label class="muted" for="order">Order</label>
+      <select id="order"></select>
+      <textarea id="complaint" placeholder="Describe the problem, e.g. I returned my headphones but still have no refund."></textarea>
+      <button id="submit" class="primary">Submit complaint</button>
+      <span id="busy" class="muted"></span>
+    </section>
+    <section class="card">
+      <h2>2. Final outcome</h2>
+      <div id="outcome" class="muted">Nothing yet.</div>
+      <div class="row"><button id="refreshRun" class="hidden">Refresh status</button></div>
+    </section>
+    <section class="card full">
+      <h2>Workflow timeline</h2>
+      <div id="timeline" class="muted">No events yet.</div>
+    </section>
+  </div>
+
+  <div id="reviewer" class="contents hidden">
+    <section class="card">
+      <h2>Approval queue</h2>
+      <div id="queue" class="muted">Loading…</div>
+      <div class="row"><button id="refreshQueue">Refresh queue</button></div>
+    </section>
+    <section class="card">
+      <h2>Evidence and proposal</h2>
+      <div id="detail" class="muted">Select an approval from the queue.</div>
+    </section>
+    <section class="card full">
+      <h2>Decision result</h2>
+      <div id="result" class="muted">Nothing decided yet.</div>
+      <h3>Timeline</h3>
+      <div id="rtimeline" class="muted">No events yet.</div>
+    </section>
+  </div>
+</main>
+
+<script>
+const state = { token: null, role: null, runId: null };
+const $ = (id) => document.getElementById(id);
+const clear = (n) => n.replaceChildren();
+
+function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined) e.append(kid);  // strings become text nodes
+  return e;
+}
+const kv = (k, v) => h('div', { class: 'kv' }, h('span', { class: 'k' }, k), h('span', {}, v ?? '—'));
+const money = (m) => (m === null || m === undefined) ? '—'
+  : '₹' + (m / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtDate = (s) => s ? new Date(s).toLocaleString() : '—';
+const pretty = (s) => String(s || '').replaceAll('_', ' ');
+
+function tone(status) {
+  if (['answered', 'refund_succeeded'].includes(status)) return 'ok';
+  if (['awaiting_approval', 'refund_unconfirmed', 'refund_pending', 'running'].includes(status)) return 'warn';
+  if (['escalated', 'rejected', 'expired', 'refund_failed', 'approval_invalid', 'failed'].includes(status)) return 'bad';
+  return '';
+}
+const badge = (status) => h('span', { class: 'badge ' + tone(status) }, pretty(status));
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json',
+               ...(state.token ? { Authorization: 'Bearer ' + state.token } : {}) },
+  });
+  let body = null;
+  try { body = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const d = body && body.detail;
+    const msg = d && d.message ? d.message : (typeof d === 'string' ? d : res.statusText);
+    throw new Error(res.status + ': ' + msg);
+  }
+  return body;
+}
+
+function showError(boxId, e) {
+  const box = $(boxId); clear(box);
+  box.append(h('p', { class: 'err' }, e.message));
+}
+
+async function showTimeline(runId, boxId) {
+  const events = await api('/runs/' + runId + '/events');
+  const box = $(boxId); clear(box);
+  if (!events.length) { box.append(h('span', { class: 'muted' }, 'No events yet.')); return; }
+  const ol = h('ol', { class: 'timeline' });
+  for (const e of events) {
+    const payload = Object.keys(e.payload || {}).length ? JSON.stringify(e.payload) : '';
+    ol.append(h('li', {},
+      h('span', { class: 't' }, fmtDate(e.created_at)), ' ',
+      h('strong', {}, pretty(e.event_type)), ' ',
+      h('span', { class: 'muted' }, 'by ' + e.actor),
+      payload ? h('div', { class: 'payload' }, payload.length > 160 ? payload.slice(0, 160) + '…' : payload) : null));
+  }
+  box.append(ol);
+}
+
+function showOutcome(run) {
+  const box = $('outcome'); clear(box);
+  box.append(h('p', {}, badge(run.status)), h('p', {}, run.final_response || ''));
+  if (run.status === 'awaiting_approval')
+    box.append(h('p', { class: 'muted' }, 'A reviewer has to decide. Use "Refresh status" afterwards.'));
+  $('refreshRun').classList.remove('hidden');
+}
+
+/* ---------------- login ---------------- */
+async function login() {
+  state.token = null;
+  const subject = $('who').value;
+  const r = await api('/auth/dev-login', { method: 'POST', body: JSON.stringify({ subject }) });
+  state.token = r.access_token; state.role = r.role; state.runId = null;
+  $('whoami').textContent = subject + ' (' + r.role + ')';
+  $('intro').classList.add('hidden');
+  $('customer').classList.toggle('hidden', r.role !== 'customer');
+  $('reviewer').classList.toggle('hidden', r.role !== 'reviewer');
+  if (r.role === 'customer') await loadOrders();
+  else await loadQueue();
+}
+
+/* ---------------- customer ---------------- */
+async function loadOrders() {
+  const orders = await api('/orders');
+  const sel = $('order'); clear(sel);
+  sel.append(h('option', { value: '' }, '(no order selected)'));
+  for (const o of orders) {
+    const items = o.items.map((i) => i.product_name).join(', ');
+    sel.append(h('option', { value: String(o.id) },
+      '#' + o.id + ' · ' + items + ' · ' + o.status + ' · ' + money(o.paid_amount_minor)));
+  }
+  clear($('outcome')); $('outcome').textContent = 'Nothing yet.';
+  clear($('timeline')); $('timeline').textContent = 'No events yet.';
+  $('refreshRun').classList.add('hidden');
+}
+
+function setBusy(on, text = '') {
+  $('submit').disabled = on;
+  $('busy').textContent = on ? text : '';
+}
+
+async function submitComplaint() {
+  const summary = $('complaint').value.trim();
+  if (!summary) return;
+  const orderValue = $('order').value;
+  try {
+    setBusy(true, 'Creating ticket…');
+    const t = await api('/tickets', { method: 'POST',
+      body: JSON.stringify({ order_id: orderValue ? Number(orderValue) : null, summary }) });
+    setBusy(true, 'Agent is investigating (can take 10–30 seconds)…');
+    const run = await api('/tickets/' + t.id + '/runs', { method: 'POST' });
+    state.runId = run.run_id;
+    showOutcome(run);
+    await showTimeline(run.run_id, 'timeline');
+  } catch (e) { showError('outcome', e); }
+  finally { setBusy(false); }
+}
+
+async function refreshRun() {
+  if (!state.runId) return;
+  try {
+    showOutcome(await api('/runs/' + state.runId));
+    await showTimeline(state.runId, 'timeline');
+  } catch (e) { showError('outcome', e); }
+}
+
+/* ---------------- reviewer ---------------- */
+async function loadQueue() {
+  const box = $('queue'); clear(box);
+  try {
+    const items = await api('/approvals');
+    if (!items.length) { box.append(h('span', { class: 'muted' }, 'No pending approvals.')); return; }
+    for (const a of items) {
+      box.append(h('button', { class: 'queue-item',
+        onclick: () => openApproval(a.approval_id).catch((e) => showError('detail', e)) },
+        h('strong', {}, '#' + a.approval_id + ' · ' + a.customer), ' ',
+        h('span', { class: 'muted' }, money(a.proposal.amount_minor) + ' · order #' + a.proposal.order_id)));
+    }
+  } catch (e) { showError('queue', e); }
+}
+
+async function openApproval(id) {
+  const d = await api('/approvals/' + id);
+  const p = d.proposal, ev = d.evidence || {};
+  const order = ev.order, ret = ev.return && ev.return.latest_return, pay = ev.payment;
+  const box = $('detail'); clear(box);
+  box.append(
+    h('p', {}, h('strong', {}, d.customer), ' · ticket #' + d.ticket_id),
+    h('blockquote', {}, d.complaint),
+    h('h3', {}, 'Proposed action'),
+    kv('Action', pretty(p.action)), kv('Amount', money(p.amount_minor)), kv('Order', '#' + p.order_id),
+    kv('Reason', p.reason), kv('Expires', fmtDate(d.expires_at)),
+    kv('Proposal hash', d.payload_hash.slice(0, 12) + '…'),
+    h('h3', {}, 'Evidence'),
+    kv('Order status', order ? order.status : null),
+    kv('Delivered', order ? fmtDate(order.delivered_at) : null),
+    kv('Paid', order ? money(order.paid_amount_minor) : null),
+    kv('Return', ret ? pretty(ret.status) + ' (received ' + fmtDate(ret.received_at) + ')' : 'none'),
+    kv('Inspection', ret ? ret.inspection_status : null),
+    kv('Already refunded', pay ? money(pay.refunded_amount_minor) : null),
+    h('h3', {}, 'Policy citations'),
+    d.policies.length ? d.policies.map((x) => h('div', { class: 'policy' },
+      h('strong', {}, x.ref), h('pre', {}, x.text))) : h('p', { class: 'muted' }, 'None.'),
+  );
+  if (d.decision) { box.append(h('p', { class: 'muted' }, 'Already decided: ' + d.decision)); return; }
+  box.append(h('div', { class: 'row' },
+    h('button', { class: 'good', onclick: () => decide(d, 'approved') }, 'Approve refund'),
+    h('button', { class: 'danger', onclick: () => decide(d, 'rejected') }, 'Reject')));
+}
+
+function showResult(run) {
+  const box = $('result'); clear(box);
+  box.append(h('p', {}, badge(run.status)), h('p', {}, run.final_response || ''));
+  if (run.status === 'refund_unconfirmed') {
+    box.append(h('div', { class: 'row' }, h('button', { class: 'primary',
+      onclick: () => reconcile(run.run_id) }, 'Reconcile with payment provider')));
+  }
+}
+
+async function decide(d, decision) {
+  if (decision === 'approved' &&
+      !confirm('Approve refund of ' + money(d.proposal.amount_minor) + ' for order #' + d.proposal.order_id + '?')) return;
+  try {
+    const r = await api('/approvals/' + d.approval_id + '/decision',
+      { method: 'POST', body: JSON.stringify({ decision }) });
+    showResult(r.run);
+    await showTimeline(r.run.run_id, 'rtimeline');
+  } catch (e) { showError('result', e); }
+  clear($('detail')); $('detail').textContent = 'Select an approval from the queue.';
+  await loadQueue();
+}
+
+async function reconcile(runId) {
+  try {
+    const r = await api('/runs/' + runId + '/reconcile', { method: 'POST' });
+    showResult(r);
+    await showTimeline(runId, 'rtimeline');
+  } catch (e) { showError('result', e); }
+}
+
+$('loginBtn').onclick = () => login().catch((e) => alert(e.message));
+$('submit').onclick = submitComplaint;
+$('refreshRun').onclick = refreshRun;
+$('refreshQueue').onclick = loadQueue;
+</script>
+</body>
+</html>

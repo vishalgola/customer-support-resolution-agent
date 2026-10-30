@@ -36,6 +36,7 @@ def propose_resolution(llm, state: dict) -> ResolutionProposal:
         "verified_facts": state["verified_facts"],
         "eligibility": state.get("eligibility"),
         "evidence_refs": state["evidence_refs"],
+        "required_action": expected_action(state["category"], state.get("eligibility")),
     }
     excerpts = [{"ref": h["ref"], "text": h["content"]} for h in state["policy_hits"]]
     return structured.invoke([

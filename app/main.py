@@ -5,6 +5,13 @@ from fastapi import FastAPI
 from app.api import approvals, auth, orders, runs, tickets
 from app.workflows.runtime import start_runtime, stop_runtime
 
+from pathlib import Path
+
+from fastapi.responses import FileResponse
+
+UI_FILE = Path(__file__).parent / "static" / "index.html"
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,6 +27,10 @@ app.include_router(tickets.router)
 app.include_router(runs.router)
 app.include_router(approvals.router)
 
+
+@app.get("/ui", include_in_schema=False)
+def ui():
+    return FileResponse(UI_FILE)
 
 @app.get("/health")
 def health():

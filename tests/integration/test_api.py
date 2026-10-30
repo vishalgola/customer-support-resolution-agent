@@ -2,6 +2,15 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
+import pytest
+
+from scripts.seed_data import seed
+
+
+@pytest.fixture(scope="module", autouse=True)
+def fresh_data():
+    seed()
+
 client = TestClient(app)
 
 

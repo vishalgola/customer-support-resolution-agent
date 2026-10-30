@@ -182,3 +182,17 @@ def test_unknown_outcome_is_reconciled_without_a_duplicate(provider):
     assert fixed.json()["status"] == "refund_succeeded"
     assert len(provider.records) == 1 and op_count() == 1  # one refund at the provider, one in our ledger
     assert ticket_status(tid) == "resolved"
+
+def test_reviewer_sees_evidence_and_policy_text():
+    start_run()
+    aid = pending_approval_id()
+    d = client.get(f"/approvals/{aid}", headers=login("auth|reviewer1")).json()
+    assert d["evidence"]["order"]["paid_amount_minor"] == 249900
+    assert d["evidence"]["return"]["latest_return"]["inspection_status"] == "passed"
+    assert d["policies"] and all(p["text"] for p in d["policies"])
+    assert client.get(f"/approvals/{aid}", headers=login("auth|asha")).status_code == 403
+
+
+def test_customer_lists_only_own_orders():
+    orders = client.get("/orders", headers=login("auth|asha")).json()
+    assert {o["id"] for o in orders} == {1, 2, 3, 4}  # order 5 belongs to Ravi
